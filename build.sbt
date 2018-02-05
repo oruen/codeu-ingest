@@ -12,5 +12,6 @@ lazy val root = (project in file(".")).
       scalaTest % Test,
       "com.typesafe.akka" %% "akka-stream" % "2.5.9",
       "com.typesafe.akka" %% "akka-http" % "10.0.11"
-    )
-  )
+    ),
+  ).enablePlugins(JavaAppPackaging)
+
