@@ -24,10 +24,12 @@ object Main extends App {
   val Host = "localhost"
   val Port = scala.util.Properties.envOrElse("PORT", "8080").toInt
   val MaxItems = scala.util.Properties.envOrElse("MAX", "100").toInt
+  val DataPath = scala.util.Properties.envOrElse("DATA", "")
+  val AccessToken = sys.env("ACCESS_TOKEN")
   val QueueSize = 500
   val AsyncRequests = 100
-  val Endpoint = "/path"
-  val Auth = Authorization(BasicHttpCredentials("user", "pass"))
+//  val Auth = Authorization(BasicHttpCredentials("user", "pass"))
+  val Auth = RawHeader("access-token", AccessToken)
   val ChunkSize = 64 * 1024
 
   val poolClientFlow = Http().cachedHostConnectionPool[Promise[HttpResponse]](Host, Port)
