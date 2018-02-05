@@ -22,15 +22,19 @@ object Main extends App {
   implicit val materializer = ActorMaterializer()
 //  val host = "34.244.159.244"
   val Host = "localhost"
-  val Port = 8080
-  val queueSize = 50
+  val Port = scala.util.Properties.envOrElse("PORT", "8080").toInt
+  val MaxItems = scala.util.Properties.envOrElse("MAX", "100").toInt
+  val QueueSize = 500
+  val AsyncRequests = 100
   val Endpoint = "/path"
+  val Auth = Authorization(BasicHttpCredentials("user", "pass"))
+  val ChunkSize = 64 * 1024
 
   val poolClientFlow = Http().cachedHostConnectionPool[Promise[HttpResponse]](Host, Port)
 
   val queue =
     Source
-      .queue[(HttpRequest, Promise[HttpResponse])](queueSize, OverflowStrategy.backpressure)
+      .queue[(HttpRequest, Promise[HttpResponse])](QueueSize, OverflowStrategy.backpressure)
       .via(poolClientFlow)
       .toMat(Sink.foreach({
         case ((Success(resp), p)) => p.success(resp)
@@ -60,7 +64,7 @@ object Main extends App {
   }
 
   def processFile(filename: String, linesNum: Int, columnNames: Seq[String] = Nil): Future[Done] = {
-    val entity = filename.replaceAll("s.csv$", "")
+    val entity = "[A-Z]".r.replaceAllIn(filename.replaceAll("s.csv$", ""), m => s"_${m.matched.toLowerCase}")
     val hasHeader = columnNames.isEmpty
     val columns =
       if (!hasHeader) columnNames
@@ -69,26 +73,30 @@ object Main extends App {
     val file = Paths.get("data/" + filename)
 
     FileIO
-      .fromPath(file)
+      .fromPath(file, ChunkSize)
       .mapConcat { bs =>
         bs.utf8String.split("\\n").toList
       }
       .drop(if (hasHeader) 1 else 0)
-      .take(100000)
+      .take(MaxItems)
       .map(l => toJson(l, columns, entity))
 //      .throttle(10000, 1.seconds, 1, ThrottleMode.Shaping)
-      .mapAsync(10) { payload =>
+      .mapAsyncUnordered(AsyncRequests) { payload =>
         queueRequest(
           HttpRequest(
-            uri = Endpoint,
+            uri = endpoint(entity),
             method = HttpMethods.POST,
-            entity = payload
+            entity = payload,
+            headers = List(Auth)
           ))
 //          headers = Seq(`Content-Type`(ContentTypes.`application/json`)))
       }
+//      .mapAsyncUnordered(500) { resp =>
       .map { resp =>
+//        Future {
         resp.discardEntityBytes()
         if (resp.status.isSuccess) (1, 0) else (0, 1)
+//        }
       }
       .recover {
         case e: RuntimeException =>
@@ -104,6 +112,8 @@ object Main extends App {
       .runForeach(println)(materializer)
   }
 
+  def endpoint(entity: String) = s"/${entity}s"
+
   def getColumns(filename: String): Seq[String] =
     IOSource
       .fromFile("data/" + filename)
@@ -115,7 +125,7 @@ object Main extends App {
 
   def toJson(line: String, columns: Seq[String], entity: String): String = {
     val out = new StringBuilder
-    out ++= s"""{"$entity":{"""
+    out ++= s"""{"""
     out ++= columns
       .zip(line.split("\t"))
       .map {
@@ -123,7 +133,7 @@ object Main extends App {
           s""""$column":"$value""""
       }
       .mkString(",")
-    out ++= "}}"
+    out ++= "}"
     out.toString()
   }
 }
