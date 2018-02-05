@@ -6,7 +6,6 @@ import akka.Done
 import akka.actor.ActorSystem
 
 import scala.concurrent._
-import scala.concurrent.duration._
 import java.nio.file.Paths
 
 import akka.http.scaladsl.Http
@@ -20,7 +19,6 @@ object Main extends App {
   implicit val system = ActorSystem("codeu")
   import system.dispatcher
   implicit val materializer = ActorMaterializer()
-//  val host = "34.244.159.244"
   val Host = "localhost"
   val Port = scala.util.Properties.envOrElse("PORT", "8080").toInt
   val MaxItems = scala.util.Properties.envOrElse("MAX", "100").toInt
@@ -28,7 +26,6 @@ object Main extends App {
   val AccessToken = sys.env("ACCESS_TOKEN")
   val QueueSize = 500
   val AsyncRequests = 100
-//  val Auth = Authorization(BasicHttpCredentials("user", "pass"))
   val Auth = RawHeader("access-token", AccessToken)
   val ChunkSize = 64 * 1024
 
@@ -82,7 +79,6 @@ object Main extends App {
       .drop(if (hasHeader) 1 else 0)
       .take(MaxItems)
       .map(l => toJson(l, columns, entity))
-//      .throttle(10000, 1.seconds, 1, ThrottleMode.Shaping)
       .mapAsyncUnordered(AsyncRequests) { payload =>
         queueRequest(
           HttpRequest(
@@ -91,14 +87,10 @@ object Main extends App {
             entity = payload,
             headers = List(Auth)
           ))
-//          headers = Seq(`Content-Type`(ContentTypes.`application/json`)))
       }
-//      .mapAsyncUnordered(500) { resp =>
       .map { resp =>
-//        Future {
         resp.discardEntityBytes()
         if (resp.status.isSuccess) (1, 0) else (0, 1)
-//        }
       }
       .recover {
         case e: RuntimeException =>
