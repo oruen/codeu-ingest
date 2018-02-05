@@ -15,11 +15,6 @@ func handlerWithCounter(counter *ratecounter.RateCounter) func(http.ResponseWrit
 	}
 }
 
-func handler(w http.ResponseWriter, r *http.Request) {
-	//counter.Incr(1)
-	fmt.Fprintf(w, "Hi there, I love %s!", r.URL.Path[1:])
-}
-
 func printRate(counter *ratecounter.RateCounter) {
 	for _ = range time.Tick(5 * time.Second) {
 		fmt.Println(counter.Rate()/10, "req/s")
